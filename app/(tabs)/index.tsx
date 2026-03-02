@@ -1,98 +1,353 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+// import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
+import React, { useEffect, useState } from "react";
+import {
+  FlatList,
+  Modal,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  useColorScheme, StatusBar
+} from "react-native";
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+interface Note {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
-export default function HomeScreen() {
+export default function Index() {
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [editingNote, setEditingNote] = useState<Note | null>(null);
+  const systemTheme = useColorScheme();
+const [isDark, setIsDark] = useState(systemTheme === "dark");
+
+  useEffect(() => {
+    loadNotes();
+  }, []);
+
+  const API_URL = "https://notes.free.beeceptor.com/api/notes";
+
+  const loadNotes = async () => {
+  try {
+    const response = await axios.get(API_URL);
+    setNotes(response.data.reverse());
+  } catch (error) {
+    console.log("Error fetching notes", error);
+  }
+};
+
+  const saveNote = async () => {
+  if (!title.trim() || !content.trim()) return;
+
+  const now = new Date().toISOString();
+
+  try {
+    if (editingNote) {
+      await axios.put(`${API_URL}/${editingNote.id}`, {
+        title,
+        content,
+        updatedAt: now,
+      });
+    } else {
+      await axios.post(API_URL, {
+        title,
+        content,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    await loadNotes();
+    setModalVisible(false);
+    setTitle("");
+    setContent("");
+    setEditingNote(null);
+  } catch (error) {
+    console.log("Error saving note", error);
+  }
+};
+
+  const openAddModal = () => {
+    setEditingNote(null);
+    setTitle("");
+    setContent("");
+    setModalVisible(true);
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+
+    return date.toLocaleString("en-IN", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  };
+
+
+  const deleteNote = async (id: string) => {
+  try {
+    await axios.delete(`${API_URL}/${id}`);
+    await loadNotes();
+  } catch (error) {
+    console.log("Error deleting note", error);
+  }
+};
+
+  const openEditModal = (note: Note) => {
+    setEditingNote(note);
+    setTitle(note.title);
+    setContent(note.content);
+    setModalVisible(true);
+  };
+
+  const theme = {
+  background: isDark ? "#121212" : "#f5f5f5",
+  card: isDark ? "#1e1e1e" : "#ffffff",
+  text: isDark ? "#ffffff" : "#000000",
+  subText: isDark ? "#aaaaaa" : "#666666",
+  border: isDark ? "#333333" : "#dddddd",
+  primary: "#6200ee",
+};
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <StatusBar
+    barStyle={isDark ? "light-content" : "dark-content"}
+    backgroundColor={theme.background}
+  />
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  {/* Header */}
+<View
+  style={[
+    styles.header,
+    { backgroundColor: theme.card, borderBottomColor: theme.border },
+  ]}
+>
+  {/* Burger Menu */}
+  <TouchableOpacity style={styles.iconButton}>
+    <Text style={{ fontSize: 22, color: theme.text }}>☰</Text>
+  </TouchableOpacity>
+
+  {/* Title */}
+  <Text style={[styles.headerTitle, { color: theme.text }]}>
+    My Notes
+  </Text>
+
+  {/* Dark Mode Toggle */}
+  <TouchableOpacity
+    style={styles.iconButton}
+    onPress={() => setIsDark(!isDark)}
+  >
+    <Text style={{ fontSize: 20 }}>
+      {isDark ? "☀️" : "🌙"}
+    </Text>
+  </TouchableOpacity>
+</View>
+
+      <FlatList
+        data={notes}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={[styles.noteCard, { backgroundColor: theme.card }]}
+            onPress={() => openEditModal(item)}
+          >
+            <Text style={[styles.noteTitle, { color: theme.text }]}>{item.title}</Text>
+            <Text style={[styles.noteContent, { color: theme.subText }]} numberOfLines={2}>
+              {item.content}
+            </Text>
+            <Text style={[styles.dateText, { color: theme.subText }]}>
+              {item.updatedAt !== item.createdAt
+                ? `${formatDate(item.updatedAt)} `
+                : formatDate(item.createdAt)}
+              {item.updatedAt !== item.createdAt && (
+                <Text style={styles.editedText}> (edited)</Text>
+              )}
+            </Text>
+          </TouchableOpacity>
+        )}
+      />
+
+      {/* Floating Button */}
+      <TouchableOpacity style={styles.fab} onPress={openAddModal}>
+        <Text style={styles.fabText}>＋</Text>
+      </TouchableOpacity>
+
+      {/* Modal */}
+      <Modal visible={modalVisible} transparent animationType="slide">
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              {editingNote ? "Edit Note" : "Add Note"}
+            </Text>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Title"
+              value={title}
+              onChangeText={setTitle}
+            />
+
+            <TextInput
+              style={[styles.input, { height: 100 }]}
+              placeholder="Write your note..."
+              value={content}
+              onChangeText={setContent}
+              multiline
+            />
+
+            <View style={styles.buttonRow}>
+              {editingNote && (
+                <TouchableOpacity
+                  style={[styles.button, styles.deleteButton]}
+                  onPress={() => {
+                    deleteNote(editingNote.id);
+                    setModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.buttonText}>Delete</Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={[styles.button, styles.saveButton]}
+                onPress={saveNote}
+              >
+                <Text style={styles.buttonText}>
+                  {editingNote ? "Update" : "Save"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
+    backgroundColor: "#f5f5f5",
+    paddingHorizontal: 16,
+  paddingTop: 10,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+
+ header: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  paddingHorizontal: 18,
+  paddingVertical: 16,
+  borderBottomWidth: 1,
+  marginBottom: 20,
+},
+
+headerTitle: {
+  fontSize: 20,
+  fontWeight: "bold",
+},
+
+iconButton: {
+  width: 40,
+  alignItems: "center",
+},
+
+  noteCard: {
+  padding: 18,
+  borderRadius: 14,
+  marginBottom: 18,
+  elevation: 3,
+},
+  noteTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 6,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  noteContent: {
+    fontSize: 14,
+    color: "#555",
+  },
+  dateText: {
+    fontSize: 11,
+    color: "gray",
+    marginTop: 4,
+  },
+  fab: {
+    position: "absolute",
+    bottom: 30,
+    right: 20,
+    backgroundColor: "#6200ee",
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 6,
+  },
+  editedText: {
+    fontSize: 11,
+    color: "#999",
+    fontStyle: "italic",
+  },
+  fabText: {
+    color: "white",
+    fontSize: 28,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.4)",
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 12,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 12,
+  },
+  buttonRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  button: {
+    padding: 12,
+    borderRadius: 10,
+    flex: 1,
+    alignItems: "center",
+    marginHorizontal: 5,
+  },
+  saveButton: {
+    backgroundColor: "#6200ee",
+  },
+  deleteButton: {
+    backgroundColor: "#e53935",
+  },
+  buttonText: {
+    color: "white",
+    fontWeight: "bold",
   },
 });
