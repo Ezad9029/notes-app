@@ -1,5 +1,3 @@
-// import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
 import React, { useEffect, useState } from "react";
 import {
   FlatList,
@@ -9,16 +7,17 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  useColorScheme, StatusBar
+  useColorScheme,
+  StatusBar,
 } from "react-native";
-
-interface Note {
-  id: string;
-  title: string;
-  content: string;
-  createdAt: string;
-  updatedAt: string;
-}
+import {
+  Note,
+  initDatabase,
+  getNotes,
+  addNote,
+  updateNote,
+  deleteNote,
+} from "./database"; // adjust path if needed e.g. "../database"
 
 export default function Index() {
   const [notes, setNotes] = useState<Note[]>([]);
@@ -27,53 +26,34 @@ export default function Index() {
   const [content, setContent] = useState("");
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const systemTheme = useColorScheme();
-const [isDark, setIsDark] = useState(systemTheme === "dark");
+  const [isDark, setIsDark] = useState(systemTheme === "dark");
 
+  // Initialize DB and load notes on first render
   useEffect(() => {
+    initDatabase();
     loadNotes();
   }, []);
 
-  const API_URL = "https://notes.free.beeceptor.com/api/notes";
+  const loadNotes = () => {
+    const data = getNotes();
+    setNotes(data);
+  };
 
-  const loadNotes = async () => {
-  try {
-    const response = await axios.get(API_URL);
-    setNotes(response.data.reverse());
-  } catch (error) {
-    console.log("Error fetching notes", error);
-  }
-};
+  const saveNote = () => {
+    if (!title.trim() || !content.trim()) return;
 
-  const saveNote = async () => {
-  if (!title.trim() || !content.trim()) return;
-
-  const now = new Date().toISOString();
-
-  try {
     if (editingNote) {
-      await axios.put(`${API_URL}/${editingNote.id}`, {
-        title,
-        content,
-        updatedAt: now,
-      });
+      updateNote(editingNote.id, title, content);
     } else {
-      await axios.post(API_URL, {
-        title,
-        content,
-        createdAt: now,
-        updatedAt: now,
-      });
+      addNote(title, content);
     }
 
-    await loadNotes();
+    loadNotes(); // refresh the list
     setModalVisible(false);
     setTitle("");
     setContent("");
     setEditingNote(null);
-  } catch (error) {
-    console.log("Error saving note", error);
-  }
-};
+  };
 
   const openAddModal = () => {
     setEditingNote(null);
@@ -82,9 +62,21 @@ const [isDark, setIsDark] = useState(systemTheme === "dark");
     setModalVisible(true);
   };
 
+  const openEditModal = (note: Note) => {
+    setEditingNote(note);
+    setTitle(note.title);
+    setContent(note.content);
+    setModalVisible(true);
+  };
+
+  const handleDelete = (id: string) => {
+    deleteNote(id);
+    loadNotes();
+    setModalVisible(false);
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-
     return date.toLocaleString("en-IN", {
       day: "numeric",
       month: "long",
@@ -95,66 +87,44 @@ const [isDark, setIsDark] = useState(systemTheme === "dark");
     });
   };
 
-
-  const deleteNote = async (id: string) => {
-  try {
-    await axios.delete(`${API_URL}/${id}`);
-    await loadNotes();
-  } catch (error) {
-    console.log("Error deleting note", error);
-  }
-};
-
-  const openEditModal = (note: Note) => {
-    setEditingNote(note);
-    setTitle(note.title);
-    setContent(note.content);
-    setModalVisible(true);
-  };
-
   const theme = {
-  background: isDark ? "#121212" : "#f5f5f5",
-  card: isDark ? "#1e1e1e" : "#ffffff",
-  text: isDark ? "#ffffff" : "#000000",
-  subText: isDark ? "#aaaaaa" : "#666666",
-  border: isDark ? "#333333" : "#dddddd",
-  primary: "#6200ee",
-};
+    background: isDark ? "#121212" : "#f5f5f5",
+    card: isDark ? "#1e1e1e" : "#ffffff",
+    text: isDark ? "#ffffff" : "#000000",
+    subText: isDark ? "#aaaaaa" : "#666666",
+    border: isDark ? "#333333" : "#dddddd",
+    primary: "#6200ee",
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-    <StatusBar
-    barStyle={isDark ? "light-content" : "dark-content"}
-    backgroundColor={theme.background}
-  />
+      <StatusBar
+        barStyle={isDark ? "light-content" : "dark-content"}
+        backgroundColor={theme.background}
+      />
 
-  {/* Header */}
-<View
-  style={[
-    styles.header,
-    { backgroundColor: theme.card, borderBottomColor: theme.border },
-  ]}
->
-  {/* Burger Menu */}
-  <TouchableOpacity style={styles.iconButton}>
-    <Text style={{ fontSize: 22, color: theme.text }}>☰</Text>
-  </TouchableOpacity>
+      {/* Header */}
+      <View
+        style={[
+          styles.header,
+          { backgroundColor: theme.card, borderBottomColor: theme.border },
+        ]}
+      >
+        <TouchableOpacity style={styles.iconButton}>
+          <Text style={{ fontSize: 22, color: theme.text }}>☰</Text>
+        </TouchableOpacity>
 
-  {/* Title */}
-  <Text style={[styles.headerTitle, { color: theme.text }]}>
-    My Notes
-  </Text>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>
+          My Notes
+        </Text>
 
-  {/* Dark Mode Toggle */}
-  <TouchableOpacity
-    style={styles.iconButton}
-    onPress={() => setIsDark(!isDark)}
-  >
-    <Text style={{ fontSize: 20 }}>
-      {isDark ? "☀️" : "🌙"}
-    </Text>
-  </TouchableOpacity>
-</View>
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={() => setIsDark(!isDark)}
+        >
+          <Text style={{ fontSize: 20 }}>{isDark ? "☀️" : "🌙"}</Text>
+        </TouchableOpacity>
+      </View>
 
       <FlatList
         data={notes}
@@ -164,8 +134,13 @@ const [isDark, setIsDark] = useState(systemTheme === "dark");
             style={[styles.noteCard, { backgroundColor: theme.card }]}
             onPress={() => openEditModal(item)}
           >
-            <Text style={[styles.noteTitle, { color: theme.text }]}>{item.title}</Text>
-            <Text style={[styles.noteContent, { color: theme.subText }]} numberOfLines={2}>
+            <Text style={[styles.noteTitle, { color: theme.text }]}>
+              {item.title}
+            </Text>
+            <Text
+              style={[styles.noteContent, { color: theme.subText }]}
+              numberOfLines={2}
+            >
               {item.content}
             </Text>
             <Text style={[styles.dateText, { color: theme.subText }]}>
@@ -188,34 +163,50 @@ const [isDark, setIsDark] = useState(systemTheme === "dark");
       {/* Modal */}
       <Modal visible={modalVisible} transparent animationType="slide">
         <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>
               {editingNote ? "Edit Note" : "Add Note"}
             </Text>
 
             <TextInput
-              style={styles.input}
+              style={[
+                styles.input,
+                { borderColor: theme.border, color: theme.text },
+              ]}
               placeholder="Title"
+              placeholderTextColor={theme.subText}
               value={title}
               onChangeText={setTitle}
             />
 
             <TextInput
-              style={[styles.input, { height: 100 }]}
+              style={[
+                styles.input,
+                {
+                  height: 100,
+                  borderColor: theme.border,
+                  color: theme.text,
+                },
+              ]}
               placeholder="Write your note..."
+              placeholderTextColor={theme.subText}
               value={content}
               onChangeText={setContent}
               multiline
             />
 
             <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={[styles.button, styles.cancelButton]}
+                onPress={() => setModalVisible(false)}
+              >
+                <Text style={styles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+
               {editingNote && (
                 <TouchableOpacity
                   style={[styles.button, styles.deleteButton]}
-                  onPress={() => {
-                    deleteNote(editingNote.id);
-                    setModalVisible(false);
-                  }}
+                  onPress={() => handleDelete(editingNote.id)}
                 >
                   <Text style={styles.buttonText}>Delete</Text>
                 </TouchableOpacity>
@@ -240,37 +231,32 @@ const [isDark, setIsDark] = useState(systemTheme === "dark");
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
     paddingHorizontal: 16,
-  paddingTop: 10,
+    paddingTop: 10,
   },
-
- header: {
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "space-between",
-  paddingHorizontal: 18,
-  paddingVertical: 16,
-  borderBottomWidth: 1,
-  marginBottom: 20,
-},
-
-headerTitle: {
-  fontSize: 20,
-  fontWeight: "bold",
-},
-
-iconButton: {
-  width: 40,
-  alignItems: "center",
-},
-
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    marginBottom: 20,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  iconButton: {
+    width: 40,
+    alignItems: "center",
+  },
   noteCard: {
-  padding: 18,
-  borderRadius: 14,
-  marginBottom: 18,
-  elevation: 3,
-},
+    padding: 18,
+    borderRadius: 14,
+    marginBottom: 18,
+    elevation: 3,
+  },
   noteTitle: {
     fontSize: 18,
     fontWeight: "bold",
@@ -278,12 +264,15 @@ iconButton: {
   },
   noteContent: {
     fontSize: 14,
-    color: "#555",
   },
   dateText: {
     fontSize: 11,
-    color: "gray",
     marginTop: 4,
+  },
+  editedText: {
+    fontSize: 11,
+    color: "#999",
+    fontStyle: "italic",
   },
   fab: {
     position: "absolute",
@@ -297,11 +286,6 @@ iconButton: {
     alignItems: "center",
     elevation: 6,
   },
-  editedText: {
-    fontSize: 11,
-    color: "#999",
-    fontStyle: "italic",
-  },
   fabText: {
     color: "white",
     fontSize: 28,
@@ -313,7 +297,6 @@ iconButton: {
     padding: 20,
   },
   modalContent: {
-    backgroundColor: "white",
     borderRadius: 16,
     padding: 20,
   },
@@ -324,7 +307,6 @@ iconButton: {
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ddd",
     borderRadius: 10,
     padding: 10,
     marginBottom: 12,
@@ -338,13 +320,16 @@ iconButton: {
     borderRadius: 10,
     flex: 1,
     alignItems: "center",
-    marginHorizontal: 5,
+    marginHorizontal: 4,
   },
   saveButton: {
     backgroundColor: "#6200ee",
   },
   deleteButton: {
     backgroundColor: "#e53935",
+  },
+  cancelButton: {
+    backgroundColor: "#888",
   },
   buttonText: {
     color: "white",
