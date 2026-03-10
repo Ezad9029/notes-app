@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   FlatList,
   Modal,
@@ -17,10 +17,12 @@ import {
   addNote,
   updateNote,
   deleteNote,
-} from "./database"; // adjust path if needed e.g. "../database"
+} from "./database";
 
 export default function Index() {
   const [notes, setNotes] = useState<Note[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -28,7 +30,6 @@ export default function Index() {
   const systemTheme = useColorScheme();
   const [isDark, setIsDark] = useState(systemTheme === "dark");
 
-  // Initialize DB and load notes on first render
   useEffect(() => {
     initDatabase();
     loadNotes();
@@ -39,16 +40,25 @@ export default function Index() {
     setNotes(data);
   };
 
+  // Filter notes in real-time as user types — no extra DB calls needed
+  const filteredNotes = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return notes;
+    return notes.filter(
+      (note) =>
+        note.title.toLowerCase().includes(query) ||
+        note.content.toLowerCase().includes(query)
+    );
+  }, [searchQuery, notes]);
+
   const saveNote = () => {
     if (!title.trim() || !content.trim()) return;
-
     if (editingNote) {
       updateNote(editingNote.id, title, content);
     } else {
       addNote(title, content);
     }
-
-    loadNotes(); // refresh the list
+    loadNotes();
     setModalVisible(false);
     setTitle("");
     setContent("");
@@ -75,6 +85,46 @@ export default function Index() {
     setModalVisible(false);
   };
 
+  const handleCancelSearch = () => {
+    setSearchQuery("");
+    setIsSearching(false);
+  };
+
+  // Highlights matching text inside note cards
+  const HighlightText = ({
+    text,
+    query,
+    style,
+    numberOfLines,
+  }: {
+    text: string;
+    query: string;
+    style: any;
+    numberOfLines?: number;
+  }) => {
+    if (!query.trim()) {
+      return (
+        <Text style={style} numberOfLines={numberOfLines}>
+          {text}
+        </Text>
+      );
+    }
+    const parts = text.split(new RegExp(`(${query})`, "gi"));
+    return (
+      <Text style={style} numberOfLines={numberOfLines}>
+        {parts.map((part, i) =>
+          part.toLowerCase() === query.toLowerCase() ? (
+            <Text key={i} style={[style, styles.highlight]}>
+              {part}
+            </Text>
+          ) : (
+            <Text key={i}>{part}</Text>
+          )
+        )}
+      </Text>
+    );
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleString("en-IN", {
@@ -93,6 +143,7 @@ export default function Index() {
     text: isDark ? "#ffffff" : "#000000",
     subText: isDark ? "#aaaaaa" : "#666666",
     border: isDark ? "#333333" : "#dddddd",
+    searchBg: isDark ? "#2a2a2a" : "#efefef",
     primary: "#6200ee",
   };
 
@@ -110,39 +161,97 @@ export default function Index() {
           { backgroundColor: theme.card, borderBottomColor: theme.border },
         ]}
       >
-        <TouchableOpacity style={styles.iconButton}>
-          <Text style={{ fontSize: 22, color: theme.text }}>☰</Text>
-        </TouchableOpacity>
+        {isSearching ? (
+          // Search mode — replaces entire header
+          <>
+            <TextInput
+              style={[
+                styles.searchInput,
+                { backgroundColor: theme.searchBg, color: theme.text },
+              ]}
+              placeholder="Search notes..."
+              placeholderTextColor={theme.subText}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoFocus
+            />
+            <TouchableOpacity
+              style={styles.cancelSearchBtn}
+              onPress={handleCancelSearch}
+            >
+              <Text style={{ color: theme.primary, fontWeight: "600" }}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          // Normal header
+          <>
+            <TouchableOpacity style={styles.iconButton}>
+              <Text style={{ fontSize: 22, color: theme.text }}>☰</Text>
+            </TouchableOpacity>
 
-        <Text style={[styles.headerTitle, { color: theme.text }]}>
-          My Notes
-        </Text>
+            <Text style={[styles.headerTitle, { color: theme.text }]}>
+              My Notes
+            </Text>
 
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={() => setIsDark(!isDark)}
-        >
-          <Text style={{ fontSize: 20 }}>{isDark ? "☀️" : "🌙"}</Text>
-        </TouchableOpacity>
+            <View style={styles.headerRight}>
+              <TouchableOpacity
+                style={styles.iconButton}
+                onPress={() => setIsSearching(true)}
+              >
+                <Text style={{ fontSize: 20 }}>🔍</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.iconButton}
+                onPress={() => setIsDark(!isDark)}
+              >
+                <Text style={{ fontSize: 20 }}>{isDark ? "☀️" : "🌙"}</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
       </View>
 
+      {/* Result count — only shown while actively searching */}
+      {isSearching && searchQuery.trim().length > 0 && (
+        <Text style={[styles.resultCount, { color: theme.subText }]}>
+          {filteredNotes.length === 0
+            ? "No notes found"
+            : `${filteredNotes.length} note${filteredNotes.length !== 1 ? "s" : ""} found`}
+        </Text>
+      )}
+
+      {/* Notes List */}
       <FlatList
-        data={notes}
+        data={filteredNotes}
         keyExtractor={(item) => item.id}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={[styles.emptyText, { color: theme.subText }]}>
+              {isSearching
+                ? "😕 No matching notes"
+                : "📝 No notes yet. Tap + to create one!"}
+            </Text>
+          </View>
+        }
         renderItem={({ item }) => (
           <TouchableOpacity
             style={[styles.noteCard, { backgroundColor: theme.card }]}
             onPress={() => openEditModal(item)}
           >
-            <Text style={[styles.noteTitle, { color: theme.text }]}>
-              {item.title}
-            </Text>
-            <Text
+            <HighlightText
+              text={item.title}
+              query={searchQuery}
+              style={[styles.noteTitle, { color: theme.text }]}
+            />
+            <HighlightText
+              text={item.content}
+              query={searchQuery}
               style={[styles.noteContent, { color: theme.subText }]}
               numberOfLines={2}
-            >
-              {item.content}
-            </Text>
+            />
             <Text style={[styles.dateText, { color: theme.subText }]}>
               {item.updatedAt !== item.createdAt
                 ? `${formatDate(item.updatedAt)} `
@@ -155,10 +264,12 @@ export default function Index() {
         )}
       />
 
-      {/* Floating Button */}
-      <TouchableOpacity style={styles.fab} onPress={openAddModal}>
-        <Text style={styles.fabText}>＋</Text>
-      </TouchableOpacity>
+      {/* FAB hidden while searching so it doesn't get in the way */}
+      {!isSearching && (
+        <TouchableOpacity style={styles.fab} onPress={openAddModal}>
+          <Text style={styles.fabText}>＋</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Modal */}
       <Modal visible={modalVisible} transparent animationType="slide">
@@ -182,11 +293,7 @@ export default function Index() {
             <TextInput
               style={[
                 styles.input,
-                {
-                  height: 100,
-                  borderColor: theme.border,
-                  color: theme.text,
-                },
+                { height: 100, borderColor: theme.border, color: theme.text },
               ]}
               placeholder="Write your note..."
               placeholderTextColor={theme.subText}
@@ -197,7 +304,7 @@ export default function Index() {
 
             <View style={styles.buttonRow}>
               <TouchableOpacity
-                style={[styles.button, styles.cancelButton]}
+                style={[styles.button, styles.cancelBtnModal]}
                 onPress={() => setModalVisible(false)}
               >
                 <Text style={styles.buttonText}>Cancel</Text>
@@ -241,15 +348,47 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    marginBottom: 20,
+    marginBottom: 12,
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: "bold",
   },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   iconButton: {
     width: 40,
     alignItems: "center",
+  },
+  searchInput: {
+    flex: 1,
+    height: 38,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    fontSize: 15,
+  },
+  cancelSearchBtn: {
+    marginLeft: 10,
+    paddingHorizontal: 4,
+  },
+  resultCount: {
+    fontSize: 12,
+    paddingHorizontal: 4,
+    marginBottom: 8,
+  },
+  highlight: {
+    backgroundColor: "#f0d000",
+    color: "#000000",
+    borderRadius: 3,
+  },
+  emptyContainer: {
+    marginTop: 80,
+    alignItems: "center",
+  },
+  emptyText: {
+    fontSize: 15,
   },
   noteCard: {
     padding: 18,
@@ -328,7 +467,7 @@ const styles = StyleSheet.create({
   deleteButton: {
     backgroundColor: "#e53935",
   },
-  cancelButton: {
+  cancelBtnModal: {
     backgroundColor: "#888",
   },
   buttonText: {
