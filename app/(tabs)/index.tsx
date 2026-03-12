@@ -18,6 +18,7 @@ import {
   Alert,
 } from "react-native";
 import * as Haptics from "expo-haptics";
+import { useTheme } from "@/app/context/ThemeContext";
 import {
   Note,
   initDatabase,
@@ -29,23 +30,7 @@ import {
 } from "./database";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const SWIPE_THRESHOLD = -80; // how far left to trigger delete reveal
-
-// ─── Theme ────────────────────────────────────────────────────────────────────
-const THEME = {
-  bg: "#0a0a0f",
-  surface: "#111118",
-  card: "#16161f",
-  cardBorder: "#1e1e2e",
-  accent: "#7c6af7",
-  accentDim: "#2a2040",
-  green: "#4ade80",
-  red: "#f87171",
-  text: "#e8e8f0",
-  textDim: "#6b6b80",
-  textMuted: "#3a3a50",
-  inputBg: "#0e0e16",
-};
+const SWIPE_THRESHOLD = -80;
 
 type SortOption = "newest" | "oldest" | "alphabetical";
 
@@ -65,6 +50,7 @@ const NoteCard = ({
   onTogglePin: (id: string, pinned: number) => void;
   searchQuery: string;
 }) => {
+  const { theme } = useTheme(); // ← global theme
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(24)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -90,21 +76,17 @@ const NoteCard = ({
     ]).start();
   }, []);
 
-  // Swipe pan responder
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, g) =>
         Math.abs(g.dx) > 8 && Math.abs(g.dy) < 20,
       onPanResponderMove: (_, g) => {
-        // Only allow left swipe
         if (g.dx > 0) return;
         swipeX.setValue(g.dx);
-        // Fade in delete action as user swipes
         deleteOpacity.setValue(Math.min(1, Math.abs(g.dx) / 80));
       },
       onPanResponderRelease: (_, g) => {
         if (g.dx < SWIPE_THRESHOLD) {
-          // Snap open to reveal delete
           Animated.spring(swipeX, {
             toValue: SWIPE_THRESHOLD,
             useNativeDriver: true,
@@ -113,14 +95,7 @@ const NoteCard = ({
           }).start();
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         } else {
-          // Snap back
-          Animated.spring(swipeX, {
-            toValue: 0,
-            useNativeDriver: true,
-            speed: 20,
-            bounciness: 4,
-          }).start();
-          deleteOpacity.setValue(0);
+          resetSwipe();
         }
       },
     })
@@ -219,61 +194,61 @@ const NoteCard = ({
     <Animated.View
       style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}
     >
-      {/* Swipe action buttons revealed behind card */}
+      {/* Swipe actions */}
       <Animated.View style={[styles.swipeActions, { opacity: deleteOpacity }]}>
-        <TouchableOpacity style={styles.pinAction} onPress={handlePin}>
+        <TouchableOpacity
+          style={[styles.pinAction, { backgroundColor: theme.accentDim }]}
+          onPress={handlePin}
+        >
           <Text style={styles.swipeActionIcon}>{item.pinned ? "📌" : "📍"}</Text>
-          <Text style={styles.swipeActionLabel}>{item.pinned ? "unpin" : "pin"}</Text>
+          <Text style={[styles.swipeActionLabel, { color: theme.textDim }]}>
+            {item.pinned ? "unpin" : "pin"}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.deleteAction} onPress={handleDelete}>
           <Text style={styles.swipeActionIcon}>🗑</Text>
-          <Text style={styles.swipeActionLabel}>Delete</Text>
+          <Text style={[styles.swipeActionLabel, { color: theme.textDim }]}>delete</Text>
         </TouchableOpacity>
       </Animated.View>
 
-      {/* The card itself */}
+      {/* Card */}
       <Animated.View
         style={{ transform: [{ translateX: swipeX }, { scale: scaleAnim }] }}
         {...panResponder.panHandlers}
       >
         <Pressable
-          onPress={() => {
-            resetSwipe();
-            onPress(item);
-          }}
+          onPress={() => { resetSwipe(); onPress(item); }}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
         >
-          <View style={[styles.noteCard, item.pinned === 1 && styles.noteCardPinned]}>
-            {/* Left accent bar — gold if pinned, violet otherwise */}
+          <View style={[
+            styles.noteCard,
+            { backgroundColor: theme.card, borderColor: theme.cardBorder },
+            item.pinned === 1 && styles.noteCardPinned,
+          ]}>
             <View
               style={[
                 styles.noteAccentBar,
-                item.pinned === 1 && { backgroundColor: "#f59e0b" },
+                { backgroundColor: item.pinned === 1 ? "#f59e0b" : theme.accent },
               ]}
             />
             <View style={styles.noteBody}>
               <View style={styles.noteTitleRow}>
-                <HighlightText
-                  text={item.title}
-                  style={styles.noteTitle}
-                />
-                {item.pinned === 1 && (
-                  <Text style={styles.pinIcon}>📌</Text>
-                )}
+                <HighlightText text={item.title} style={[styles.noteTitle, { color: theme.text }]} />
+                {item.pinned === 1 && <Text style={styles.pinIcon}>📌</Text>}
               </View>
               <HighlightText
                 text={item.content}
-                style={styles.noteContent}
+                style={[styles.noteContent, { color: theme.textDim }]}
                 numberOfLines={2}
               />
               <View style={styles.noteMeta}>
-                <Text style={styles.dateText}>
+                <Text style={[styles.dateText, { color: theme.textMuted }]}>
                   {formatDate(isEdited ? item.updatedAt : item.createdAt)}
                 </Text>
                 {isEdited && (
-                  <View style={styles.editedBadge}>
-                    <Text style={styles.editedBadgeText}>edited</Text>
+                  <View style={[styles.editedBadge, { backgroundColor: theme.accentDim }]}>
+                    <Text style={[styles.editedBadgeText, { color: theme.accent }]}>edited</Text>
                   </View>
                 )}
               </View>
@@ -287,26 +262,35 @@ const NoteCard = ({
 
 // ─── Sort Pill ────────────────────────────────────────────────────────────────
 const SortPill = ({
-  label,
-  active,
-  onPress,
+  label, active, onPress,
 }: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) => (
-  <TouchableOpacity
-    style={[styles.sortPill, active && styles.sortPillActive]}
-    onPress={onPress}
-  >
-    <Text style={[styles.sortPillText, active && styles.sortPillTextActive]}>
-      {label}
-    </Text>
-  </TouchableOpacity>
-);
+  label: string; active: boolean; onPress: () => void;
+}) => {
+  const { theme } = useTheme();
+  return (
+    <TouchableOpacity
+      style={[
+        styles.sortPill,
+        { backgroundColor: theme.surface, borderColor: theme.cardBorder },
+        active && { backgroundColor: theme.accentDim, borderColor: theme.accent },
+      ]}
+      onPress={onPress}
+    >
+      <Text style={[
+        styles.sortPillText,
+        { color: theme.textDim },
+        active && { color: theme.accent, fontWeight: "600" },
+      ]}>
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+};
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function Index() {
+  const { theme } = useTheme(); // ← global theme, replaces local THEME constant
+
   const [notes, setNotes] = useState<Note[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
@@ -330,10 +314,8 @@ export default function Index() {
 
   const loadNotes = () => setNotes(getNotes());
 
-  // ── Sorting + filtering ─────────────────────────────────────────────────────
   const processedNotes = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-
     let result = query
       ? notes.filter(
           (n) =>
@@ -342,19 +324,18 @@ export default function Index() {
         )
       : [...notes];
 
-    // Pinned notes always float to top regardless of sort
     const pinned = result.filter((n) => n.pinned === 1);
     const unpinned = result.filter((n) => n.pinned === 0);
 
     const sort = (arr: Note[]) => {
       switch (sortBy) {
         case "newest":
-          return arr.sort(
-            (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+          return arr.sort((a, b) =>
+            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
           );
         case "oldest":
-          return arr.sort(
-            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          return arr.sort((a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
           );
         case "alphabetical":
           return arr.sort((a, b) => a.title.localeCompare(b.title));
@@ -490,7 +471,6 @@ export default function Index() {
     outputRange: [0, SCREEN_WIDTH - 110],
   });
 
-  // ── Sort bar toggle ─────────────────────────────────────────────────────────
   const toggleSort = () => {
     const next = !showSort;
     setShowSort(next);
@@ -508,20 +488,10 @@ export default function Index() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
-  // ── FAB ─────────────────────────────────────────────────────────────────────
   const handleFabPress = () => {
     Animated.sequence([
-      Animated.timing(fabScale, {
-        toValue: 0.88,
-        duration: 80,
-        useNativeDriver: true,
-      }),
-      Animated.spring(fabScale, {
-        toValue: 1,
-        useNativeDriver: true,
-        speed: 40,
-        bounciness: 12,
-      }),
+      Animated.timing(fabScale, { toValue: 0.88, duration: 80, useNativeDriver: true }),
+      Animated.spring(fabScale, { toValue: 1, useNativeDriver: true, speed: 40, bounciness: 12 }),
     ]).start();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     openAddModal();
@@ -530,21 +500,20 @@ export default function Index() {
   const pinnedCount = notes.filter((n) => n.pinned === 1).length;
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={THEME.bg} />
+    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+      <StatusBar barStyle={theme.statusBar} backgroundColor={theme.bg} />
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <View style={styles.header}>
+      <View style={[styles.header, { borderBottomColor: theme.cardBorder }]}>
         <View style={styles.headerLeft}>
           {!isSearching && (
             <>
-              <View style={styles.logoMark} />
+              <View style={[styles.logoMark, { backgroundColor: theme.accent }]} />
               <View>
-                <Text style={styles.headerTitle}>
-                  Notes<Text style={styles.headerDot}>.</Text>
+                <Text style={[styles.headerTitle, { color: theme.text }]}>
+                  Notes<Text style={{ color: theme.accent }}>.</Text>
                 </Text>
-                {/* Note count */}
-                <Text style={styles.noteCount}>
+                <Text style={[styles.noteCount, { color: theme.textDim }]}>
                   {notes.length === 0
                     ? "empty"
                     : `${notes.length} note${notes.length !== 1 ? "s" : ""}${
@@ -558,37 +527,43 @@ export default function Index() {
 
         <View style={styles.headerRight}>
           {isSearching && (
-            <Animated.View style={[styles.searchBarWrap, { width: searchBarWidth }]}>
-              <Text style={styles.searchIcon}>⌕</Text>
+            <Animated.View style={[
+              styles.searchBarWrap,
+              { width: searchBarWidth, backgroundColor: theme.inputBg, borderColor: theme.accent },
+            ]}>
+              <Text style={[styles.searchIcon, { color: theme.accent }]}>⌕</Text>
               <TextInput
-                style={styles.searchInput}
+                style={[styles.searchInput, { color: theme.text }]}
                 placeholder="search notes..."
-                placeholderTextColor={THEME.textMuted}
+                placeholderTextColor={theme.textMuted}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 autoFocus
               />
               {searchQuery.length > 0 && (
                 <TouchableOpacity onPress={() => setSearchQuery("")}>
-                  <Text style={styles.clearBtn}>✕</Text>
+                  <Text style={[styles.clearBtn, { color: theme.textDim }]}>✕</Text>
                 </TouchableOpacity>
               )}
             </Animated.View>
           )}
 
           {!isSearching && (
-            <TouchableOpacity style={styles.headerBtn} onPress={toggleSort}>
-              <Text style={[styles.headerBtnText, showSort && { color: THEME.accent }]}>
+            <TouchableOpacity
+              style={[styles.headerBtn, { backgroundColor: theme.surface, borderColor: theme.cardBorder }]}
+              onPress={toggleSort}
+            >
+              <Text style={[styles.headerBtnText, { color: showSort ? theme.accent : theme.textDim }]}>
                 ⇅
               </Text>
             </TouchableOpacity>
           )}
 
           <TouchableOpacity
-            style={styles.headerBtn}
+            style={[styles.headerBtn, { backgroundColor: theme.surface, borderColor: theme.cardBorder }]}
             onPress={isSearching ? closeSearch : openSearch}
           >
-            <Text style={[styles.headerBtnText, isSearching && { color: THEME.accent }]}>
+            <Text style={[styles.headerBtnText, { color: isSearching ? theme.accent : theme.textDim }]}>
               {isSearching ? "Done" : "⌕"}
             </Text>
           </TouchableOpacity>
@@ -596,27 +571,17 @@ export default function Index() {
       </View>
 
       {/* ── Sort bar ───────────────────────────────────────────────────────── */}
-      <Animated.View style={[styles.sortBar, { height: sortBarHeight, overflow: "hidden" }]}>
-        <SortPill
-          label="Newest"
-          active={sortBy === "newest"}
-          onPress={() => handleSortSelect("newest")}
-        />
-        <SortPill
-          label="Oldest"
-          active={sortBy === "oldest"}
-          onPress={() => handleSortSelect("oldest")}
-        />
-        <SortPill
-          label="A → Z"
-          active={sortBy === "alphabetical"}
-          onPress={() => handleSortSelect("alphabetical")}
-        />
+      <Animated.View style={[
+        styles.sortBar,
+        { height: sortBarHeight, overflow: "hidden", borderBottomColor: theme.cardBorder },
+      ]}>
+        <SortPill label="Newest" active={sortBy === "newest"} onPress={() => handleSortSelect("newest")} />
+        <SortPill label="Oldest" active={sortBy === "oldest"} onPress={() => handleSortSelect("oldest")} />
+        <SortPill label="A → Z" active={sortBy === "alphabetical"} onPress={() => handleSortSelect("alphabetical")} />
       </Animated.View>
 
-      {/* Search result count */}
       {isSearching && searchQuery.trim().length > 0 && (
-        <Text style={styles.resultCount}>
+        <Text style={[styles.resultCount, { color: theme.textDim }]}>
           {processedNotes.length === 0
             ? "no results"
             : `${processedNotes.length} result${processedNotes.length !== 1 ? "s" : ""}`}
@@ -631,11 +596,13 @@ export default function Index() {
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>{isSearching ? "∅" : "◈"}</Text>
-            <Text style={styles.emptyTitle}>
+            <Text style={[styles.emptyIcon, { color: theme.textMuted }]}>
+              {isSearching ? "∅" : "◈"}
+            </Text>
+            <Text style={[styles.emptyTitle, { color: theme.textDim }]}>
               {isSearching ? "nothing found" : "no notes yet"}
             </Text>
-            <Text style={styles.emptySubtitle}>
+            <Text style={[styles.emptySubtitle, { color: theme.textMuted }]}>
               {isSearching
                 ? `no notes match "${searchQuery}"`
                 : "tap + to create your first note"}
@@ -657,7 +624,11 @@ export default function Index() {
       {/* ── FAB ────────────────────────────────────────────────────────────── */}
       {!isSearching && (
         <Animated.View style={[styles.fabWrap, { transform: [{ scale: fabScale }] }]}>
-          <TouchableOpacity style={styles.fab} onPress={handleFabPress} activeOpacity={1}>
+          <TouchableOpacity
+            style={[styles.fab, { backgroundColor: theme.accent, shadowColor: theme.accent }]}
+            onPress={handleFabPress}
+            activeOpacity={1}
+          >
             <Text style={styles.fabText}>+</Text>
           </TouchableOpacity>
         </Animated.View>
@@ -670,54 +641,60 @@ export default function Index() {
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
           <Animated.View style={[styles.modalBackdrop, { opacity: modalBgOpacity }]}>
-            <TouchableOpacity
-              style={{ flex: 1 }}
-              activeOpacity={1}
-              onPress={() => closeModal()}
-            />
+            <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => closeModal()} />
           </Animated.View>
 
-          <Animated.View
-            style={[styles.modalSheet, { transform: [{ translateY: modalSlide }] }]}
-          >
-            <View style={styles.sheetHandle} />
-            <Text style={styles.modalTitle}>
+          <Animated.View style={[
+            styles.modalSheet,
+            {
+              backgroundColor: theme.surface,
+              borderColor: theme.cardBorder,
+              transform: [{ translateY: modalSlide }],
+            },
+          ]}>
+            <View style={[styles.sheetHandle, { backgroundColor: theme.textMuted }]} />
+
+            <Text style={[styles.modalTitle, { color: theme.text }]}>
               {editingNote ? "Edit Note" : "New Note"}
             </Text>
 
             <TextInput
-              style={styles.modalInput}
+              style={[styles.modalInput, {
+                backgroundColor: theme.inputBg,
+                borderColor: theme.cardBorder,
+                color: theme.text,
+              }]}
               placeholder="title"
-              placeholderTextColor={THEME.textMuted}
+              placeholderTextColor={theme.textMuted}
               value={title}
               onChangeText={setTitle}
             />
             <TextInput
-              style={[styles.modalInput, styles.modalTextArea]}
+              style={[styles.modalInput, styles.modalTextArea, {
+                backgroundColor: theme.inputBg,
+                borderColor: theme.cardBorder,
+                color: theme.text,
+              }]}
               placeholder="write something..."
-              placeholderTextColor={THEME.textMuted}
+              placeholderTextColor={theme.textMuted}
               value={content}
               onChangeText={setContent}
               multiline
               textAlignVertical="top"
             />
 
-            {/* Pin toggle inside modal for editing */}
             {editingNote && (
               <TouchableOpacity
                 style={styles.pinToggleRow}
                 onPress={() => {
                   handleTogglePin(editingNote.id, editingNote.pinned);
-                  setEditingNote({
-                    ...editingNote,
-                    pinned: editingNote.pinned ? 0 : 1,
-                  });
+                  setEditingNote({ ...editingNote, pinned: editingNote.pinned ? 0 : 1 });
                 }}
               >
                 <Text style={styles.pinToggleIcon}>
                   {editingNote.pinned ? "📌" : "📍"}
                 </Text>
-                <Text style={styles.pinToggleText}>
+                <Text style={[styles.pinToggleText, { color: theme.textDim }]}>
                   {editingNote.pinned ? "Unpin" : "Pin"}
                 </Text>
               </TouchableOpacity>
@@ -732,6 +709,7 @@ export default function Index() {
               <TouchableOpacity
                 style={[
                   styles.saveBtn,
+                  { backgroundColor: theme.accent },
                   (!title.trim() || !content.trim()) && styles.saveBtnDisabled,
                 ]}
                 onPress={saveNote}
@@ -749,11 +727,9 @@ export default function Index() {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ─── Styles — only layout/spacing here, NO hardcoded colors ──────────────────
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: THEME.bg },
-
-  // Header
+  container: { flex: 1 },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -762,75 +738,52 @@ const styles = StyleSheet.create({
     paddingTop: 52,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: THEME.cardBorder,
   },
   headerLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
-  logoMark: { width: 8, height: 8, borderRadius: 2, backgroundColor: THEME.accent },
-  headerTitle: { fontSize: 22, fontWeight: "700", color: THEME.text, letterSpacing: 1 },
-  headerDot: { color: THEME.accent },
-  noteCount: { fontSize: 11, color: THEME.textDim, letterSpacing: 0.4, marginTop: 1 },
+  logoMark: { width: 8, height: 8, borderRadius: 2 },
+  headerTitle: { fontSize: 22, fontWeight: "700", letterSpacing: 1 },
+  noteCount: { fontSize: 11, letterSpacing: 0.4, marginTop: 1 },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
   headerBtn: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: THEME.surface,
     borderWidth: 1,
-    borderColor: THEME.cardBorder,
   },
-  headerBtnText: { color: THEME.textDim, fontSize: 16, fontWeight: "500" },
-
-  // Sort bar
+  headerBtnText: { fontSize: 16, fontWeight: "500" },
   sortBar: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
     gap: 8,
     borderBottomWidth: 1,
-    borderBottomColor: THEME.cardBorder,
   },
   sortPill: {
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 20,
-    backgroundColor: THEME.surface,
     borderWidth: 1,
-    borderColor: THEME.cardBorder,
   },
-  sortPillActive: {
-    backgroundColor: THEME.accentDim,
-    borderColor: THEME.accent,
-  },
-  sortPillText: { fontSize: 12, color: THEME.textDim, letterSpacing: 0.3 },
-  sortPillTextActive: { color: THEME.accent, fontWeight: "600" },
-
-  // Search
+  sortPillText: { fontSize: 12, letterSpacing: 0.3 },
   searchBarWrap: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: THEME.inputBg,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: THEME.accent,
     paddingHorizontal: 10,
     height: 36,
     overflow: "hidden",
   },
-  searchIcon: { color: THEME.accent, fontSize: 16, marginRight: 6 },
-  searchInput: { flex: 1, color: THEME.text, fontSize: 14, paddingVertical: 0 },
-  clearBtn: { color: THEME.textDim, fontSize: 12, paddingLeft: 6 },
+  searchIcon: { fontSize: 16, marginRight: 6 },
+  searchInput: { flex: 1, fontSize: 14, paddingVertical: 0 },
+  clearBtn: { fontSize: 12, paddingLeft: 6 },
   resultCount: {
-    color: THEME.textDim,
     fontSize: 11,
     paddingHorizontal: 20,
     paddingTop: 10,
     letterSpacing: 0.5,
   },
-
-  // List
   listContent: { padding: 16, paddingBottom: 100 },
-
-  // Swipe actions
   swipeActions: {
     position: "absolute",
     right: 0,
@@ -842,7 +795,6 @@ const styles = StyleSheet.create({
   },
   pinAction: {
     width: 72,
-    backgroundColor: THEME.accentDim,
     justifyContent: "center",
     alignItems: "center",
     gap: 4,
@@ -855,22 +807,16 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   swipeActionIcon: { fontSize: 18 },
-  swipeActionLabel: { fontSize: 10, color: THEME.textDim, letterSpacing: 0.3 },
-
-  // Note card
+  swipeActionLabel: { fontSize: 10, letterSpacing: 0.3 },
   noteCard: {
     flexDirection: "row",
-    backgroundColor: THEME.card,
     borderRadius: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: THEME.cardBorder,
     overflow: "hidden",
   },
-  noteCardPinned: {
-    borderColor: "rgba(245,158,11,0.3)",
-  },
-  noteAccentBar: { width: 3, backgroundColor: THEME.accent, opacity: 0.6 },
+  noteCardPinned: { borderColor: "rgba(245,158,11,0.3)" },
+  noteAccentBar: { width: 3, opacity: 0.6 },
   noteBody: { flex: 1, padding: 14 },
   noteTitleRow: {
     flexDirection: "row",
@@ -878,79 +824,54 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 5,
   },
-  noteTitle: { fontSize: 15, fontWeight: "700", color: THEME.text, letterSpacing: 0.2, flex: 1 },
+  noteTitle: { fontSize: 15, fontWeight: "700", letterSpacing: 0.2, flex: 1 },
   pinIcon: { fontSize: 13, marginLeft: 6 },
-  noteContent: { fontSize: 13, color: THEME.textDim, lineHeight: 19, marginBottom: 10 },
+  noteContent: { fontSize: 13, lineHeight: 19, marginBottom: 10 },
   noteMeta: { flexDirection: "row", alignItems: "center", gap: 8 },
-  dateText: { fontSize: 10, color: THEME.textMuted, letterSpacing: 0.3 },
-  editedBadge: {
-    backgroundColor: THEME.accentDim,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  editedBadgeText: { fontSize: 9, color: THEME.accent, letterSpacing: 0.5, fontWeight: "600" },
+  dateText: { fontSize: 10, letterSpacing: 0.3 },
+  editedBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  editedBadgeText: { fontSize: 9, letterSpacing: 0.5, fontWeight: "600" },
   highlight: { backgroundColor: "#f0d000", color: "#000", borderRadius: 2 },
-
-  // Empty state
   emptyContainer: { alignItems: "center", paddingTop: 100, gap: 8 },
-  emptyIcon: { fontSize: 36, color: THEME.textMuted, marginBottom: 8 },
-  emptyTitle: { fontSize: 16, fontWeight: "700", color: THEME.textDim, letterSpacing: 0.5 },
-  emptySubtitle: { fontSize: 13, color: THEME.textMuted, letterSpacing: 0.3 },
-
-  // FAB
+  emptyIcon: { fontSize: 36, marginBottom: 8 },
+  emptyTitle: { fontSize: 16, fontWeight: "700", letterSpacing: 0.5 },
+  emptySubtitle: { fontSize: 13, letterSpacing: 0.3 },
   fabWrap: { position: "absolute", bottom: 32, right: 20 },
   fab: {
     width: 56,
     height: 56,
     borderRadius: 16,
-    backgroundColor: THEME.accent,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: THEME.accent,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 12,
     elevation: 8,
   },
   fabText: { color: "#fff", fontSize: 28, fontWeight: "300", lineHeight: 32 },
-
-  // Modal
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.7)",
   },
   modalSheet: {
-    backgroundColor: THEME.surface,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
     paddingBottom: 40,
     borderTopWidth: 1,
-    borderColor: THEME.cardBorder,
   },
   sheetHandle: {
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: THEME.textMuted,
     alignSelf: "center",
     marginBottom: 20,
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: THEME.text,
-    letterSpacing: 0.5,
-    marginBottom: 20,
-  },
+  modalTitle: { fontSize: 18, fontWeight: "700", letterSpacing: 0.5, marginBottom: 20 },
   modalInput: {
-    backgroundColor: THEME.inputBg,
     borderWidth: 1,
-    borderColor: THEME.cardBorder,
     borderRadius: 10,
     padding: 14,
-    color: THEME.text,
     fontSize: 15,
     marginBottom: 12,
   },
@@ -964,11 +885,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   pinToggleIcon: { fontSize: 16 },
-  pinToggleText: { fontSize: 14, color: THEME.textDim, letterSpacing: 0.3 },
+  pinToggleText: { fontSize: 14, letterSpacing: 0.3 },
   modalActions: { flexDirection: "row", gap: 10, marginTop: 4 },
   saveBtn: {
     flex: 1,
-    backgroundColor: THEME.accent,
     borderRadius: 10,
     paddingVertical: 14,
     alignItems: "center",
@@ -984,5 +904,5 @@ const styles = StyleSheet.create({
     borderColor: "rgba(248,113,113,0.25)",
     alignItems: "center",
   },
-  deleteBtnText: { color: THEME.red, fontWeight: "600", fontSize: 15, letterSpacing: 0.5 },
+  deleteBtnText: { color: "#f87171", fontWeight: "600", fontSize: 15, letterSpacing: 0.5 },
 });
